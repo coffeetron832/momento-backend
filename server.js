@@ -13,16 +13,15 @@ const User = require('./models/User');
 
 const app = express();
 
-// Lista de orígenes permitidos (solo producción y desarrollo)
+// Lista de orígenes permitidos
 const allowedOrigins = [
-  'https://momentto.netlify.app', // ✅ tu frontend correcto en producción
+  'https://momentto.netlify.app', // ✅ frontend en producción
   'http://localhost:3000'         // desarrollo local
 ];
 
-// Configuración CORS
+// Configuración de CORS
 app.use(cors({
   origin: function (origin, callback) {
-    // Permitir solicitudes sin origin (como Postman) o desde lista
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
@@ -32,10 +31,10 @@ app.use(cors({
   credentials: true
 }));
 
-// Middleware
+// Middleware para parsear JSON
 app.use(express.json());
 
-// Puerto y secret
+// Puerto y JWT
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -43,32 +42,6 @@ const JWT_SECRET = process.env.JWT_SECRET;
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ Conectado a MongoDB correctamente.'))
   .catch(err => console.error('❌ Error conectando a MongoDB:', err.message));
-
-// Resto del código continúa igual...
-
-// CORS con whitelist
-const allowedOrigins = [
-  'https://mmomento-production.up.railway.app', // frontend en Railway
-  'https://momentto.netlify.app',
-  'https://momento-backend-production.up.railway.app',
-  'http://localhost:3000'
-];
-
-// Asegúrate de usar exactamente la URL donde está tu frontend
-const FRONTEND_URL = 'https://mmomento-production.up.railway.app';
-
-app.options('*', cors({
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('No permitido por CORS'), false);
-  },
-  methods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
-  credentials: true
-}));
-
-
-app.use(express.json());
 
 // Ruta raíz
 app.get('/', (req, res) => {
@@ -230,7 +203,7 @@ app.delete('/api/eliminar/:filename', verificarToken, (req, res) => {
 // Servir imágenes estáticas
 app.use('/uploads', express.static(UPLOAD_DIR));
 
-// Eliminación automática cada 10 minutos
+// Eliminación automática de imágenes vencidas
 setInterval(() => {
   fs.readdirSync(UPLOAD_DIR).forEach(file => {
     if (file.endsWith('.json')) {
@@ -246,7 +219,7 @@ setInterval(() => {
       }
     }
   });
-}, 10 * 60 * 1000); // 10 minutos
+}, 10 * 60 * 1000); // cada 10 minutos
 
 // Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {
