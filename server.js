@@ -15,7 +15,7 @@ const app  = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// Conexión a MongoDB (sin opciones obsoletas)
+// Conexión a MongoDB
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ Conectado a MongoDB correctamente.');
@@ -25,30 +25,18 @@ mongoose.connect(process.env.MONGO_URI)
   });
 
 // Middlewares
-// Agregamos aquí el dominio correcto de frontend para evitar error CORS
-const allowedOrigins = [
-  'https://momentto.netlify.app',
-  'https://scythe-caterwauling-act.glitch.me',
-  'https://calm-aback-vacuum.glitch.me',
-  'https://mmomento-production.up.railway.app'  // <-- frontend actual que usas
-];
-
 app.use(cors({
-  origin: function(origin, callback) {
-    // Permitir peticiones sin origen (como Postman) o si está en allowedOrigins
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('No permitido por CORS'));
-    }
-  },
+  origin: [
+    'https://momentto.netlify.app',
+    'https://scythe-caterwauling-act.glitch.me',
+    'https://calm-aback-vacuum.glitch.me'
+  ],
   methods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
   credentials: true
 }));
-
 app.use(express.json());
 
-// Ruta raíz para mantener vivo el servicio
+// Ruta raíz
 app.get('/', (req, res) => {
   res.send('🟢 Servidor activo y escuchando peticiones');
 });
@@ -119,12 +107,13 @@ app.use('/api/auth', authRouter);
 // Configuración de subida de imágenes
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, UPLOAD_DIR),
     filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
   }),
-  limits: { fileSize: 2 * 1024 * 1024 },
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB máximo
   fileFilter(req, file, cb) {
     if (!file.mimetype.startsWith('image/')) {
       return cb(new Error('Solo se permiten imágenes.'));
@@ -133,6 +122,7 @@ const upload = multer({
   }
 });
 
+// Subir imagen (requiere token)
 app.post('/api/upload', verificarToken, upload.single('imagen'), (req, res) => {
   try {
     const file = req.file;
@@ -142,7 +132,7 @@ app.post('/api/upload', verificarToken, upload.single('imagen'), (req, res) => {
     const meta = {
       usuario: req.usuario.username,
       uploadedAt: Date.now(),
-      expireAt: Date.now() + 4 * 60 * 60 * 1000
+      expireAt: Date.now() + 4 * 60 * 60 * 1000 // 4 horas
     };
     fs.writeFileSync(
       path.join(UPLOAD_DIR, `${file.filename}.json`),
@@ -155,6 +145,7 @@ app.post('/api/upload', verificarToken, upload.single('imagen'), (req, res) => {
   }
 });
 
+// Listar imágenes vigentes
 app.get('/api/imagenes', (req, res) => {
   try {
     const images = [];
@@ -180,6 +171,7 @@ app.get('/api/imagenes', (req, res) => {
   }
 });
 
+// Eliminar imagen (requiere token)
 app.delete('/api/eliminar/:filename', verificarToken, (req, res) => {
   try {
     const { filename } = req.params;
@@ -201,8 +193,10 @@ app.delete('/api/eliminar/:filename', verificarToken, (req, res) => {
   }
 });
 
+// Servir archivos estáticos de uploads
 app.use('/uploads', express.static(UPLOAD_DIR));
 
+// Limpieza automática de imágenes expiradas cada 10 minutos
 setInterval(() => {
   fs.readdirSync(UPLOAD_DIR).forEach(file => {
     if (file.endsWith('.json')) {
@@ -218,13 +212,7 @@ setInterval(() => {
       }
     }
   });
-}, 10 * 60 * 1000);
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
-});
-
-}, 10 * 60 * 1000);
+}, 10 * 60 * 1000); // 10 minutos
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
