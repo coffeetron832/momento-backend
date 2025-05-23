@@ -36,6 +36,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Ruta raíz para mantener vivo el servicio
+app.get('/', (req, res) => {
+  res.send('🟢 Servidor activo y escuchando peticiones');
+});
+
 // Middleware para verificar JWT
 function verificarToken(req, res, next) {
   const authHeader = req.headers.authorization || '';
@@ -51,7 +56,6 @@ function verificarToken(req, res, next) {
 // Rutas de autenticación
 const authRouter = express.Router();
 
-// Registro de usuario
 authRouter.post('/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -72,7 +76,6 @@ authRouter.post('/register', async (req, res) => {
   }
 });
 
-// Login de usuario
 authRouter.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -118,7 +121,6 @@ const upload = multer({
   }
 });
 
-// Subir imagen
 app.post('/api/upload', verificarToken, upload.single('imagen'), (req, res) => {
   try {
     const file = req.file;
@@ -141,7 +143,6 @@ app.post('/api/upload', verificarToken, upload.single('imagen'), (req, res) => {
   }
 });
 
-// Listar imágenes públicas
 app.get('/api/imagenes', (req, res) => {
   try {
     const images = [];
@@ -167,7 +168,6 @@ app.get('/api/imagenes', (req, res) => {
   }
 });
 
-// Eliminar imagen propia
 app.delete('/api/eliminar/:filename', verificarToken, (req, res) => {
   try {
     const { filename } = req.params;
@@ -189,10 +189,8 @@ app.delete('/api/eliminar/:filename', verificarToken, (req, res) => {
   }
 });
 
-// Servir uploads estáticos
 app.use('/uploads', express.static(UPLOAD_DIR));
 
-// Limpieza periódica cada 10 minutos
 setInterval(() => {
   fs.readdirSync(UPLOAD_DIR).forEach(file => {
     if (file.endsWith('.json')) {
@@ -210,7 +208,6 @@ setInterval(() => {
   });
 }, 10 * 60 * 1000);
 
-// Iniciar servidor en 0.0.0.0 y puerto dinámico
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
