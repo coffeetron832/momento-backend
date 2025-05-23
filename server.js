@@ -28,6 +28,9 @@ const allowedOrigins = [
   'http://localhost:3000'
 ];
 
+// Asegúrate de usar exactamente la URL donde está tu frontend
+const FRONTEND_URL = 'https://mmomento-production.up.railway.app';
+
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin) return callback(null, true); // Postman o herramientas sin origin
