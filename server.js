@@ -1,39 +1,45 @@
 require('dotenv').config();
-const express    = require('express');
-const cors       = require('cors');
-const mongoose   = require('mongoose');
-const jwt        = require('jsonwebtoken');
-const multer     = require('multer');
-const fs         = require('fs');
-const path       = require('path');
-const bcrypt     = require('bcryptjs');
+const express = require('express');
+const cors = require('cors');
+const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+const bcrypt = require('bcryptjs');
 
 // Modelos
 const User = require('./models/User');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET;
 
 // Conexión a MongoDB
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('✅ Conectado a MongoDB correctamente.');
-  })
-  .catch((err) => {
-    console.error('❌ Error conectando a MongoDB:', err.message);
-  });
+  .then(() => console.log('✅ Conectado a MongoDB correctamente.'))
+  .catch(err => console.error('❌ Error conectando a MongoDB:', err.message));
 
-// Middlewares
+// CORS con whitelist
+const allowedOrigins = [
+  'https://mmomento-production.up.railway.app', // frontend en Railway
+  'https://momentto.netlify.app',
+  'https://momento-backend-production.up.railway.app',
+  'http://localhost:3000'
+];
+
 app.use(cors({
-  origin: [
-    'https://momentto.netlify.app',
-    'https://scythe-caterwauling-act.glitch.me',
-    'https://calm-aback-vacuum.glitch.me'
-  ],
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true); // Postman o herramientas sin origin
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    console.warn('❌ CORS bloqueado para:', origin);
+    return callback(new Error('No permitido por CORS'), false);
+  },
   methods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
   credentials: true
 }));
+app.options('*', cors()); // Habilita respuestas a preflight requests
+
 app.use(express.json());
 
 // Ruta raíz
@@ -41,11 +47,12 @@ app.get('/', (req, res) => {
   res.send('🟢 Servidor activo y escuchando peticiones');
 });
 
-// Middleware para verificar JWT
+// Middleware para verificar token
 function verificarToken(req, res, next) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Token requerido' });
+
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.status(403).json({ error: 'Token inválido o expirado' });
     req.usuario = user;
@@ -104,7 +111,7 @@ authRouter.post('/login', async (req, res) => {
 
 app.use('/api/auth', authRouter);
 
-// Configuración de subida de imágenes
+// Subida de imágenes
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
 
@@ -113,7 +120,7 @@ const upload = multer({
     destination: (req, file, cb) => cb(null, UPLOAD_DIR),
     filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
   }),
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB máximo
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
   fileFilter(req, file, cb) {
     if (!file.mimetype.startsWith('image/')) {
       return cb(new Error('Solo se permiten imágenes.'));
@@ -122,7 +129,6 @@ const upload = multer({
   }
 });
 
-// Subir imagen (requiere token)
 app.post('/api/upload', verificarToken, upload.single('imagen'), (req, res) => {
   try {
     const file = req.file;
@@ -145,7 +151,7 @@ app.post('/api/upload', verificarToken, upload.single('imagen'), (req, res) => {
   }
 });
 
-// Listar imágenes vigentes
+// Listar imágenes activas
 app.get('/api/imagenes', (req, res) => {
   try {
     const images = [];
@@ -171,7 +177,7 @@ app.get('/api/imagenes', (req, res) => {
   }
 });
 
-// Eliminar imagen (requiere token)
+// Eliminar imagen
 app.delete('/api/eliminar/:filename', verificarToken, (req, res) => {
   try {
     const { filename } = req.params;
@@ -193,10 +199,10 @@ app.delete('/api/eliminar/:filename', verificarToken, (req, res) => {
   }
 });
 
-// Servir archivos estáticos de uploads
+// Servir imágenes estáticas
 app.use('/uploads', express.static(UPLOAD_DIR));
 
-// Limpieza automática de imágenes expiradas cada 10 minutos
+// Eliminación automática cada 10 minutos
 setInterval(() => {
   fs.readdirSync(UPLOAD_DIR).forEach(file => {
     if (file.endsWith('.json')) {
@@ -214,6 +220,7 @@ setInterval(() => {
   });
 }, 10 * 60 * 1000); // 10 minutos
 
+// Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
