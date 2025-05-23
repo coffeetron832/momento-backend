@@ -41,7 +41,16 @@ app.use(cors({
   methods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
   credentials: true
 }));
-app.options('*', cors()); // Habilita respuestas a preflight requests
+app.options('*', cors({
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('No permitido por CORS'), false);
+  },
+  methods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
+  credentials: true
+}));
+
 
 app.use(express.json());
 
