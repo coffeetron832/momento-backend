@@ -12,6 +12,13 @@ const bcrypt = require('bcryptjs');
 const User = require('./models/User');
 
 const app = express();
+
+app.use(cors({
+  origin: 'https://mmomento-production.up.railway.app',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
+
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -31,16 +38,6 @@ const allowedOrigins = [
 // Asegúrate de usar exactamente la URL donde está tu frontend
 const FRONTEND_URL = 'https://mmomento-production.up.railway.app';
 
-app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true); // Postman o herramientas sin origin
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    console.warn('❌ CORS bloqueado para:', origin);
-    return callback(new Error('No permitido por CORS'), false);
-  },
-  methods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
-  credentials: true
-}));
 app.options('*', cors({
   origin: function(origin, callback) {
     if (!origin) return callback(null, true);
