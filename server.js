@@ -25,15 +25,27 @@ mongoose.connect(process.env.MONGO_URI)
   });
 
 // Middlewares
+// Agregamos aquí el dominio correcto de frontend para evitar error CORS
+const allowedOrigins = [
+  'https://momentto.netlify.app',
+  'https://scythe-caterwauling-act.glitch.me',
+  'https://calm-aback-vacuum.glitch.me',
+  'https://mmomento-production.up.railway.app'  // <-- frontend actual que usas
+];
+
 app.use(cors({
-  origin: [
-    'https://momentto.netlify.app',
-    'https://scythe-caterwauling-act.glitch.me',
-    'https://calm-aback-vacuum.glitch.me'
-  ],
-  methods: ['GET','POST','OPTIONS','DELETE'],
+  origin: function(origin, callback) {
+    // Permitir peticiones sin origen (como Postman) o si está en allowedOrigins
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('No permitido por CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
   credentials: true
 }));
+
 app.use(express.json());
 
 // Ruta raíz para mantener vivo el servicio
@@ -206,6 +218,12 @@ setInterval(() => {
       }
     }
   });
+}, 10 * 60 * 1000);
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
+});
+
 }, 10 * 60 * 1000);
 
 app.listen(PORT, '0.0.0.0', () => {
