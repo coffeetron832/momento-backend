@@ -13,12 +13,29 @@ const User = require('./models/User');
 
 const app = express();
 
+// Lista de orígenes permitidos (solo producción y desarrollo)
+const allowedOrigins = [
+  'https://momentto.netlify.app', // ✅ tu frontend correcto en producción
+  'http://localhost:3000'         // desarrollo local
+];
+
+// Configuración CORS
 app.use(cors({
-  origin: 'https://mmomento-production.up.railway.app',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  origin: function (origin, callback) {
+    // Permitir solicitudes sin origin (como Postman) o desde lista
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('No permitido por CORS'), false);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true
 }));
 
+// Middleware
+app.use(express.json());
+
+// Puerto y secret
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -26,6 +43,8 @@ const JWT_SECRET = process.env.JWT_SECRET;
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ Conectado a MongoDB correctamente.'))
   .catch(err => console.error('❌ Error conectando a MongoDB:', err.message));
+
+// Resto del código continúa igual...
 
 // CORS con whitelist
 const allowedOrigins = [
