@@ -7,6 +7,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const cookieParser = require('cookie-parser');
 
 // Modelos
 const User = require('./models/User');
@@ -15,7 +16,7 @@ const app = express();
 
 // Lista de orígenes permitidos
 const allowedOrigins = [
-  'https://momentto.netlify.app', // ✅ frontend en producción
+  'https://momentto.netlify.app', // frontend en producción
   'http://localhost:3000'         // desarrollo local
 ];
 
@@ -31,8 +32,9 @@ app.use(cors({
   credentials: true
 }));
 
-// Middleware para parsear JSON
+// Middleware para parsear JSON y cookies
 app.use(express.json());
+app.use(cookieParser());
 
 // Puerto y JWT
 const PORT = process.env.PORT || 4000;
@@ -48,10 +50,20 @@ app.get('/', (req, res) => {
   res.send('🟢 Servidor activo y escuchando peticiones');
 });
 
-// Middleware para verificar token
+// Middleware para verificar token (header o cookie)
 function verificarToken(req, res, next) {
+  let token;
+
+  // Intentar obtener token desde header Authorization
   const authHeader = req.headers.authorization || '';
-  const token = authHeader.split(' ')[1];
+  if (authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  }
+  // Si no está en header, intentar desde cookie
+  if (!token && req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  }
+
   if (!token) return res.status(401).json({ error: 'Token requerido' });
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
@@ -103,11 +115,42 @@ authRouter.post('/login', async (req, res) => {
       JWT_SECRET,
       { expiresIn: '4h' }
     );
-    res.json({ token });
+
+    // Enviar cookie con el token
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 4 * 60 * 60 * 1000 // 4 horas
+    });
+
+    res.json({ message: 'Login exitoso' });
   } catch (err) {
     console.error('Error en login:', err);
     res.status(500).json({ error: 'Error interno al iniciar sesión.' });
   }
+});
+
+// Ruta para validar sesión activa vía cookie o header
+authRouter.get('/session', verificarToken, (req, res) => {
+  res.json({
+    loggedIn: true,
+    user: {
+      id: req.usuario.id,
+      username: req.usuario.username,
+      email: req.usuario.email
+    }
+  });
+});
+
+// Logout: borrar cookie de sesión
+authRouter.post('/logout', (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
+  });
+  res.json({ message: 'Sesión cerrada correctamente' });
 });
 
 app.use('/api/auth', authRouter);
@@ -153,7 +196,7 @@ app.post('/api/upload', verificarToken, upload.single('imagen'), (req, res) => {
 });
 
 // Listar imágenes activas
-app.get('/api/imagenes', (req, res) => {
+app.get('/api/imagenes', verificarToken, (req, res) => {
   try {
     const images = [];
     fs.readdirSync(UPLOAD_DIR).forEach(file => {
@@ -225,3 +268,4 @@ setInterval(() => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
+
