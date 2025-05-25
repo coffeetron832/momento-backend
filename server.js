@@ -33,7 +33,8 @@ app.use(cors({
   credentials: true
 }));
 
-// Middleware para parsear JSON y cookies\app.use(express.json());
+// Middleware para parsear JSON y cookies
+app.use(express.json());
 app.use(cookieParser());
 
 // Puerto y JWT
@@ -160,7 +161,8 @@ authRouter.post('/logout', (req, res) => {
 
 app.use('/api/auth', authRouter);
 
-// Subida de imágenes\const UPLOAD_DIR = path.join(__dirname, 'uploads');
+// Subida de imágenes
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
 
 const upload = multer({
@@ -272,4 +274,3 @@ setInterval(() => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor escuchando en http://0.0.0.0:${PORT}`);
 });
-
