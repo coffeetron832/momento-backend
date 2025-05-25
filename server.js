@@ -33,13 +33,18 @@ app.use(cors({
   credentials: true
 }));
 
-// Middleware para parsear JSON y cookies
-app.use(express.json());
+// Middleware para parsear JSON y cookies\app.use(express.json());
 app.use(cookieParser());
 
 // Puerto y JWT
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET;
+
+// Middleware de debug para ver cookies en cada petición (opcional)
+app.use((req, res, next) => {
+  console.log('Cookies recibidas:', req.cookies);
+  next();
+});
 
 // Conexión a MongoDB
 mongoose.connect(process.env.MONGO_URI)
@@ -54,7 +59,6 @@ app.get('/', (req, res) => {
 // Middleware para verificar token (header o cookie)
 function verificarToken(req, res, next) {
   let token;
-
   // Intentar obtener token desde header Authorization
   const authHeader = req.headers.authorization || '';
   if (authHeader.startsWith('Bearer ')) {
@@ -121,7 +125,7 @@ authRouter.post('/login', async (req, res) => {
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 4 * 60 * 60 * 1000 // 4 horas
     });
 
@@ -149,15 +153,14 @@ authRouter.post('/logout', (req, res) => {
   res.clearCookie('token', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict'
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
   });
   res.json({ message: 'Sesión cerrada correctamente' });
 });
 
 app.use('/api/auth', authRouter);
 
-// Subida de imágenes
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
+// Subida de imágenes\const UPLOAD_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
 
 const upload = multer({
