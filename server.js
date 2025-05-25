@@ -17,7 +17,7 @@ const app = express();
 // Lista de orígenes permitidos
 const allowedOrigins = [
   'https://momentto.netlify.app', // frontend en producción
-  'http://localhost:3000'         // desarrollo local
+  'http://localhost:3000',         // desarrollo local
   'https://mmomento-production.up.railway.app'
 ];
 
