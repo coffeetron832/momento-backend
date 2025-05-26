@@ -18,8 +18,7 @@ const app = express();
 const allowedOrigins = [
   'https://momentto.netlify.app', // frontend en producción
   'http://localhost:3000',         // desarrollo local
-  'https://mmomento-production.up.railway.app',
-  'https://momentto.netlify.app/main.html'
+  'https://mmomento-production.up.railway.app'
 ];
 
 // Configuración de CORS
