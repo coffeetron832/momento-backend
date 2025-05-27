@@ -11,15 +11,13 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const multer = require('multer');
 const cron = require('node-cron');
-const cookieParser = require('cookie-parser');
 
 const app = express();
 
 // --- Configuración variables de entorno ---
 const PORT = process.env.PORT || 3000;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://coffeetron:VP7x-Vf@momentclu.tpsspsi.mongodb.net/?retryWrites=true&w=majority&appName=MomentClu';
-const JWT_SECRET = process.env.JWT_SECRET || '7f4b3c9d1a2e5f6a8b0c1d3e4f5a6b7c
-';
+const MONGO_URI = process.env.MONGO_URI;
+const JWT_SECRET = process.env.JWT_SECRET;
 const FRONTEND_ORIGIN = 'https://momentto.netlify.app';
 
 // --- Conexión a MongoDB ---
@@ -27,32 +25,37 @@ mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 }).then(() => {
-  console.log('MongoDB conectado');
+  console.log('✅ MongoDB conectado');
 }).catch(err => {
-  console.error('Error MongoDB:', err);
+  console.error('❌ Error MongoDB:', err);
 });
 
-// --- Modelos Mongoose ejemplo ---
+// --- Esquema de usuario ---
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true }
 });
-
 const User = mongoose.model('User', userSchema);
 
-// --- Middleware global ---
+// --- Middlewares globales ---
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
-app.use(cookieParser());
 
+// --- CORS sin cookies ---
 app.use(cors({
   origin: FRONTEND_ORIGIN,
-  credentials: true
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Rate limiter global (por ejemplo, 100 requests por 15 minutos)
+// --- Respuesta para preflight ---
+app.options('*', cors({
+  origin: FRONTEND_ORIGIN
+}));
+
+// --- Limitador de solicitudes ---
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -60,13 +63,12 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// --- Multer configuración para subir imágenes ---
+// --- Configuración de subida de archivos con multer ---
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/'); // carpeta uploads (debe existir)
+    cb(null, 'uploads/');
   },
   filename: (req, file, cb) => {
-    // renombra archivo con uuid para evitar conflictos
     const { v4: uuidv4 } = require('uuid');
     const ext = file.originalname.split('.').pop();
     cb(null, uuidv4() + '.' + ext);
@@ -74,10 +76,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// --- Middleware para verificar JWT ---
+// --- Verificación de token JWT ---
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'] || '';
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Token no proporcionado' });
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
@@ -87,10 +89,8 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// --- Rutas ---
-// Registro de usuario
+// --- Registro de usuario ---
 app.post('/api/auth/register',
-  // Validación con express-validator
   body('username').isLength({ min: 3 }),
   body('email').isEmail(),
   body('password').isLength({ min: 6 }),
@@ -107,7 +107,6 @@ app.post('/api/auth/register',
       if (existUser) return res.status(400).json({ error: 'Email ya registrado' });
 
       const passwordHash = await bcrypt.hash(password, 10);
-
       const newUser = new User({ username, email, passwordHash });
       await newUser.save();
 
@@ -118,7 +117,7 @@ app.post('/api/auth/register',
     }
   });
 
-// Login de usuario
+// --- Login de usuario ---
 app.post('/api/auth/login',
   body('email').isEmail(),
   body('password').exists(),
@@ -145,31 +144,28 @@ app.post('/api/auth/login',
     }
   });
 
-// Ruta protegida de ejemplo (chequea token)
+// --- Ruta protegida para verificar sesión ---
 app.get('/api/auth/session', authenticateToken, (req, res) => {
   res.json({ message: 'Sesión válida', user: req.user });
 });
 
-// Subida de imagen protegida
+// --- Subida de imagen protegida ---
 app.post('/api/upload', authenticateToken, upload.single('imagen'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Archivo no subido' });
-  // Aquí puedes guardar info en BD si quieres
 
   res.json({ mensaje: 'Imagen subida correctamente', filename: req.file.filename });
 });
 
-// Ejemplo de cron para borrar imágenes antiguas (requiere que implementes lógica)
-// Se ejecuta cada día a las 00:00
+// --- Tarea automática para limpiar imágenes (simulada) ---
 cron.schedule('0 0 * * *', () => {
-  console.log('Tarea cron: limpiar imágenes antiguas');
-  // Aquí pones la lógica para borrar archivos expirados
+  console.log('🧹 Tarea cron: limpiar imágenes antiguas');
+  // lógica de eliminación pendiente
 });
 
-// --- Servir carpeta uploads estática (opcional) ---
+// --- Servir imágenes estáticamente ---
 app.use('/uploads', express.static('uploads'));
 
 // --- Iniciar servidor ---
 app.listen(PORT, () => {
-  console.log(`Servidor escuchando en puerto ${PORT}`);
+  console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
-
