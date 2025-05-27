@@ -20,6 +20,31 @@ const MONGO_URI = process.env.MONGO_URI;
 let JWT_SECRET = process.env.JWT_SECRET;
 const FRONTEND_ORIGIN = 'https://momentto.netlify.app';
 
+// --- Middlewares globales ---
+app.use(helmet());
+app.use(morgan('dev'));
+app.use(express.json());
+
+// --- Ruta raíz para comprobar servidor ---
+app.get('/', (req, res) => {
+  res.status(200).send('🚀 Momento API está corriendo correctamente');
+});
+
+// --- CORS sin cookies ---
+app.use(cors({
+  origin: FRONTEND_ORIGIN,
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization']
+}));
+app.options('*', cors({ origin: FRONTEND_ORIGIN }));
+
+// --- Limitador de solicitudes ---
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Demasiadas solicitudes, intenta más tarde' }
+}));
+
 // --- Conexión a MongoDB ---
 mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
@@ -37,26 +62,6 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true }
 });
 const User = mongoose.model('User', userSchema);
-
-// --- Middlewares globales ---
-app.use(helmet());
-app.use(morgan('dev'));
-app.use(express.json());
-
-// --- CORS sin cookies ---
-app.use(cors({
-  origin: FRONTEND_ORIGIN,
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization']
-}));
-app.options('*', cors({ origin: FRONTEND_ORIGIN }));
-
-// --- Limitador de solicitudes ---
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: 'Demasiadas solicitudes, intenta más tarde' }
-}));
 
 // --- Configuración de subida de archivos con multer ---
 const storage = multer.diskStorage({
