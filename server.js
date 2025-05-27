@@ -17,17 +17,28 @@ const app = express();
 // --- Configuración variables de entorno ---
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
-let JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET;
 const FRONTEND_ORIGIN = 'https://momentto.netlify.app';
 
 // --- Middlewares globales ---
 app.use(helmet());
 app.use(morgan('dev'));
-app.use(express.json());
+app.use(express.json()); // Debe ir antes de cors y rutas para parsear JSON correctamente
 
 // --- Ruta raíz para comprobar servidor ---
 app.get('/', (req, res) => {
   res.status(200).send('🚀 Momento API está corriendo correctamente');
+});
+
+// --- Ruta de prueba de conexión a la base de datos ---
+app.get('/api/ping', async (req, res) => {
+  try {
+    const count = await mongoose.connection.db.collection('users').countDocuments();
+    return res.json({ message: 'DB conectada', usersCount: count });
+  } catch (err) {
+    console.error('🌐 Error ping DB:', err);
+    return res.status(500).json({ error: 'Error de conexión a la base de datos' });
+  }
 });
 
 // --- CORS sin cookies ---
@@ -81,7 +92,10 @@ function authenticateToken(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Token no proporcionado' });
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Token inválido' });
+    if (err) {
+      console.error('🔒 Token inválido:', err);
+      return res.status(403).json({ error: 'Token inválido' });
+    }
     req.user = user;
     next();
   });
@@ -95,6 +109,7 @@ app.post('/api/auth/register',
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.warn('⚠️ Registro inválido:', errors.array());
       return res.status(400).json({ error: errors.array() });
     }
 
@@ -103,6 +118,7 @@ app.post('/api/auth/register',
     try {
       const existUser = await User.findOne({ email });
       if (existUser) {
+        console.warn('🛑 Email ya registrado:', email);
         return res.status(400).json({ error: 'Email ya registrado' });
       }
 
@@ -110,21 +126,22 @@ app.post('/api/auth/register',
       const newUser = new User({ username, email, passwordHash });
       await newUser.save();
 
-      res.json({ message: 'Usuario registrado correctamente' });
+      return res.status(201).json({ message: 'Usuario registrado correctamente' });
     } catch (err) {
-      console.error('Error registro:', err);
-      res.status(500).json({ error: 'Error interno del servidor' });
+      console.error('🔴 Error registro:', err);
+      return res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
 );
 
-// --- Login de usuario (con logging y fallback de JWT_SECRET) ---
+// --- Login de usuario ---
 app.post('/api/auth/login',
   body('email').isEmail(),
   body('password').exists(),
-  async (req, res) => {
+  async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.warn('⚠️ Login inválido:', errors.array());
       return res.status(400).json({ error: errors.array() });
     }
 
@@ -133,20 +150,19 @@ app.post('/api/auth/login',
 
     if (!JWT_SECRET) {
       console.error('⚠️ JWT_SECRET no definido en el entorno');
-      // Fallback para diagnóstico; no usar en producción
-      JWT_SECRET = 'fallback-secret';
+      return res.status(500).json({ error: 'JWT_SECRET no definido en el servidor' });
     }
 
     try {
       const user = await User.findOne({ email });
       if (!user) {
-        console.warn('🛑 Login fallido: usuario no encontrado:', email);
+        console.warn('🛑 Usuario no encontrado:', email);
         return res.status(401).json({ error: 'Credenciales incorrectas' });
       }
 
       const match = await bcrypt.compare(password, user.passwordHash);
       if (!match) {
-        console.warn('🛑 Login fallido: contraseña incorrecta para:', email);
+        console.warn('🛑 Contraseña incorrecta para:', email);
         return res.status(401).json({ error: 'Credenciales incorrectas' });
       }
 
@@ -154,25 +170,26 @@ app.post('/api/auth/login',
       const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
       console.log('✅ Login exitoso:', email);
 
-      res.json({ token, username: user.username });
+      return res.json({ token, username: user.username });
     } catch (err) {
       console.error('🔥 Error interno en /api/auth/login:', err);
-      res.status(500).json({ error: 'Error interno del servidor' });
+      return next(err); // Pasa al middleware de error
     }
   }
 );
 
 // --- Ruta protegida para verificar sesión ---
 app.get('/api/auth/session', authenticateToken, (req, res) => {
-  res.json({ message: 'Sesión válida', user: req.user });
+  return res.json({ message: 'Sesión válida', user: req.user });
 });
 
 // --- Subida de imagen protegida ---
 app.post('/api/upload', authenticateToken, upload.single('imagen'), (req, res) => {
   if (!req.file) {
+    console.warn('⚠️ Intento de subir sin archivo');
     return res.status(400).json({ error: 'Archivo no subido' });
   }
-  res.json({ mensaje: 'Imagen subida correctamente', filename: req.file.filename });
+  return res.json({ mensaje: 'Imagen subida correctamente', filename: req.file.filename });
 });
 
 // --- Tarea automática para limpiar imágenes antiguas ---
@@ -183,6 +200,12 @@ cron.schedule('0 0 * * *', () => {
 
 // --- Servir carpeta uploads estática ---
 app.use('/uploads', express.static('uploads'));
+
+// --- Middleware de manejo de errores ---
+app.use((err, req, res, next) => {
+  console.error('💥 Unhandled error:', err);
+  res.status(500).json({ error: 'Error interno (capturado por middleware)' });
+});
 
 // --- Iniciar servidor ---
 app.listen(PORT, () => {
