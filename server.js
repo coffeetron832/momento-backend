@@ -45,7 +45,7 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 
 // --- Middlewares globales ---
-app.use(express.json()); // Primero parseo JSON
+app.use(express.json());
 app.use(cors({
   origin: FRONTEND_ORIGIN,
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
@@ -71,6 +71,12 @@ app.get('/api/ping', async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+// --- Evitar error "Cannot GET /api/auth/login" ---
+// Retorna info para GET, login solo acepta POST
+app.get('/api/auth/login', (req, res) => {
+  res.status(200).send('El endpoint /api/auth/login acepta solo peticiones POST.');
 });
 
 // --- Middleware de verificación token ---
@@ -202,3 +208,4 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
+
