@@ -14,23 +14,19 @@ const cron = require('node-cron');
 
 const app = express();
 
-// --- Configuración variables de entorno ---
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
 const FRONTEND_ORIGIN = 'https://momentto.netlify.app';
 
-// --- Conexión a MongoDB ---
+// MongoDB conexión
 mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-}).then(() => {
-  console.log('✅ MongoDB conectado');
-}).catch(err => {
-  console.error('❌ Error MongoDB:', err);
-});
+}).then(() => console.log('✅ MongoDB conectado'))
+  .catch(err => console.error('❌ Error MongoDB:', err));
 
-// --- Esquema de usuario ---
+// Usuario esquema y modelo
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true },
   email: { type: String, required: true, unique: true },
@@ -38,36 +34,29 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', userSchema);
 
-// --- Middlewares globales ---
+// Middlewares
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
 
-// --- CORS sin cookies ---
+// CORS configuración
 app.use(cors({
   origin: FRONTEND_ORIGIN,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+app.options('*', cors({ origin: FRONTEND_ORIGIN }));
 
-// --- Respuesta para preflight ---
-app.options('*', cors({
-  origin: FRONTEND_ORIGIN
-}));
-
-// --- Limitador de solicitudes ---
-const limiter = rateLimit({
+// Rate limiter
+app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   message: { error: 'Demasiadas solicitudes, intenta más tarde' }
-});
-app.use(limiter);
+}));
 
-// --- Configuración de subida de archivos con multer ---
+// Multer para uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
+  destination: (req, file, cb) => cb(null, 'uploads/'),
   filename: (req, file, cb) => {
     const { v4: uuidv4 } = require('uuid');
     const ext = file.originalname.split('.').pop();
@@ -76,7 +65,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// --- Verificación de token JWT ---
+// Middleware JWT auth
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'] || '';
   const token = authHeader.split(' ')[1];
@@ -89,22 +78,22 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// --- Registro de usuario ---
+// Registro usuario
 app.post('/api/auth/register',
   body('username').isLength({ min: 3 }),
   body('email').isEmail(),
   body('password').isLength({ min: 6 }),
   async (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
+    if (!errors.isEmpty())
       return res.status(400).json({ error: errors.array() });
-    }
 
     const { username, email, password } = req.body;
 
     try {
       const existUser = await User.findOne({ email });
-      if (existUser) return res.status(400).json({ error: 'Email ya registrado' });
+      if (existUser)
+        return res.status(400).json({ error: 'Email ya registrado' });
 
       const passwordHash = await bcrypt.hash(password, 10);
       const newUser = new User({ username, email, passwordHash });
@@ -112,60 +101,65 @@ app.post('/api/auth/register',
 
       res.json({ message: 'Usuario registrado correctamente' });
     } catch (err) {
-      console.error(err);
+      console.error('Error registro:', err);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   });
 
-// --- Login de usuario ---
+// Login usuario
 app.post('/api/auth/login',
   body('email').isEmail(),
   body('password').exists(),
   async (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
+    if (!errors.isEmpty())
       return res.status(400).json({ error: errors.array() });
-    }
 
     const { email, password } = req.body;
     try {
       const user = await User.findOne({ email });
-      if (!user) return res.status(401).json({ error: 'Credenciales incorrectas' });
+      if (!user)
+        return res.status(401).json({ error: 'Credenciales incorrectas' });
 
       const match = await bcrypt.compare(password, user.passwordHash);
-      if (!match) return res.status(401).json({ error: 'Credenciales incorrectas' });
+      if (!match)
+        return res.status(401).json({ error: 'Credenciales incorrectas' });
 
-      const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+      // Datos mínimos en el token
+      const payload = { id: user._id, username: user.username, email: user.email };
 
-      res.json({ token });
+      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+
+      res.json({ token, user: payload });
     } catch (err) {
-      console.error(err);
+      console.error('Error login:', err);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   });
 
-// --- Ruta protegida para verificar sesión ---
+// Verificar sesión
 app.get('/api/auth/session', authenticateToken, (req, res) => {
   res.json({ message: 'Sesión válida', user: req.user });
 });
 
-// --- Subida de imagen protegida ---
+// Subida de imagen
 app.post('/api/upload', authenticateToken, upload.single('imagen'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Archivo no subido' });
+  if (!req.file)
+    return res.status(400).json({ error: 'Archivo no subido' });
 
   res.json({ mensaje: 'Imagen subida correctamente', filename: req.file.filename });
 });
 
-// --- Tarea automática para limpiar imágenes (simulada) ---
+// Cron para limpiar uploads (pendiente lógica)
 cron.schedule('0 0 * * *', () => {
   console.log('🧹 Tarea cron: limpiar imágenes antiguas');
-  // lógica de eliminación pendiente
+  // Aquí agregarías código para borrar archivos viejos
 });
 
-// --- Servir imágenes estáticamente ---
+// Servir archivos estáticos
 app.use('/uploads', express.static('uploads'));
 
-// --- Iniciar servidor ---
+// Iniciar servidor
 app.listen(PORT, () => {
   console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
