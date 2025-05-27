@@ -14,47 +14,51 @@ const cron = require('node-cron');
 
 const app = express();
 
+// --- Configuración variables de entorno ---
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
-const JWT_SECRET = process.env.JWT_SECRET;
+let JWT_SECRET = process.env.JWT_SECRET;
 const FRONTEND_ORIGIN = 'https://momentto.netlify.app';
 
-// MongoDB conexión
+// --- Conexión a MongoDB ---
 mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-}).then(() => console.log('✅ MongoDB conectado'))
-  .catch(err => console.error('❌ Error MongoDB:', err));
+}).then(() => {
+  console.log('✅ MongoDB conectado');
+}).catch(err => {
+  console.error('❌ Error MongoDB:', err);
+});
 
-// Usuario esquema y modelo
+// --- Esquema de usuario ---
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
+  email:    { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true }
 });
 const User = mongoose.model('User', userSchema);
 
-// Middlewares
+// --- Middlewares globales ---
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
 
-// CORS configuración
+// --- CORS sin cookies ---
 app.use(cors({
   origin: FRONTEND_ORIGIN,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization']
 }));
 app.options('*', cors({ origin: FRONTEND_ORIGIN }));
 
-// Rate limiter
+// --- Limitador de solicitudes ---
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   message: { error: 'Demasiadas solicitudes, intenta más tarde' }
 }));
 
-// Multer para uploads
+// --- Configuración de subida de archivos con multer ---
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
   filename: (req, file, cb) => {
@@ -65,7 +69,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Middleware JWT auth
+// --- Verificación de token JWT ---
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'] || '';
   const token = authHeader.split(' ')[1];
@@ -78,22 +82,24 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// Registro usuario
+// --- Registro de usuario ---
 app.post('/api/auth/register',
   body('username').isLength({ min: 3 }),
   body('email').isEmail(),
   body('password').isLength({ min: 6 }),
   async (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty())
+    if (!errors.isEmpty()) {
       return res.status(400).json({ error: errors.array() });
+    }
 
     const { username, email, password } = req.body;
 
     try {
       const existUser = await User.findOne({ email });
-      if (existUser)
+      if (existUser) {
         return res.status(400).json({ error: 'Email ya registrado' });
+      }
 
       const passwordHash = await bcrypt.hash(password, 10);
       const newUser = new User({ username, email, passwordHash });
@@ -104,62 +110,76 @@ app.post('/api/auth/register',
       console.error('Error registro:', err);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
-  });
+  }
+);
 
-// Login usuario
+// --- Login de usuario (con logging y fallback de JWT_SECRET) ---
 app.post('/api/auth/login',
   body('email').isEmail(),
   body('password').exists(),
   async (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty())
+    if (!errors.isEmpty()) {
       return res.status(400).json({ error: errors.array() });
+    }
 
     const { email, password } = req.body;
+    console.log('🔐 Login attempt:', { email });
+
+    if (!JWT_SECRET) {
+      console.error('⚠️ JWT_SECRET no definido en el entorno');
+      // Fallback para diagnóstico; no usar en producción
+      JWT_SECRET = 'fallback-secret';
+    }
+
     try {
       const user = await User.findOne({ email });
-      if (!user)
+      if (!user) {
+        console.warn('🛑 Login fallido: usuario no encontrado:', email);
         return res.status(401).json({ error: 'Credenciales incorrectas' });
+      }
 
       const match = await bcrypt.compare(password, user.passwordHash);
-      if (!match)
+      if (!match) {
+        console.warn('🛑 Login fallido: contraseña incorrecta para:', email);
         return res.status(401).json({ error: 'Credenciales incorrectas' });
+      }
 
-      // Datos mínimos en el token
       const payload = { id: user._id, username: user.username, email: user.email };
-
       const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+      console.log('✅ Login exitoso:', email);
 
-      res.json({ token, user: payload });
+      res.json({ token, username: user.username });
     } catch (err) {
-      console.error('Error login:', err);
+      console.error('🔥 Error interno en /api/auth/login:', err);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
-  });
+  }
+);
 
-// Verificar sesión
+// --- Ruta protegida para verificar sesión ---
 app.get('/api/auth/session', authenticateToken, (req, res) => {
   res.json({ message: 'Sesión válida', user: req.user });
 });
 
-// Subida de imagen
+// --- Subida de imagen protegida ---
 app.post('/api/upload', authenticateToken, upload.single('imagen'), (req, res) => {
-  if (!req.file)
+  if (!req.file) {
     return res.status(400).json({ error: 'Archivo no subido' });
-
+  }
   res.json({ mensaje: 'Imagen subida correctamente', filename: req.file.filename });
 });
 
-// Cron para limpiar uploads (pendiente lógica)
+// --- Tarea automática para limpiar imágenes antiguas ---
 cron.schedule('0 0 * * *', () => {
   console.log('🧹 Tarea cron: limpiar imágenes antiguas');
-  // Aquí agregarías código para borrar archivos viejos
+  // Aquí agrega la lógica para borrar archivos expirados
 });
 
-// Servir archivos estáticos
+// --- Servir carpeta uploads estática ---
 app.use('/uploads', express.static('uploads'));
 
-// Iniciar servidor
+// --- Iniciar servidor ---
 app.listen(PORT, () => {
   console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
