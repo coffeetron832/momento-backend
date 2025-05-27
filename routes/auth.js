@@ -3,73 +3,82 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const User = require('../models/User'); // Usa el mismo modelo definido en server.js
+const User = require('../models/User');
 
-// POST /api/auth/register
-router.post('/register',
+// --- Registro ---
+router.post(
+  '/register',
   [
-    body('username').notEmpty().withMessage('Nombre de usuario requerido'),
-    body('email').isEmail().withMessage('Correo inválido'),
+    body('username').notEmpty().withMessage('El nombre de usuario es obligatorio'),
+    body('email').isEmail().withMessage('Email no válido'),
     body('password').isLength({ min: 6 }).withMessage('La contraseña debe tener al menos 6 caracteres')
   ],
   async (req, res) => {
-    const errores = validationResult(req);
-    if (!errores.isEmpty()) {
-      return res.status(400).json({ errores: errores.array() });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errores: errors.array() });
     }
 
     const { username, email, password } = req.body;
 
     try {
-      const existente = await User.findOne({ email });
-      if (existente) return res.status(400).json({ error: 'El correo ya está registrado' });
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(409).json({ error: 'El correo ya está registrado' });
+      }
 
       const passwordHash = await bcrypt.hash(password, 10);
-      const nuevoUsuario = new User({ username, email, passwordHash });
-      await nuevoUsuario.save();
+      const newUser = new User({ username, email, passwordHash });
+      await newUser.save();
 
-      res.status(201).json({ mensaje: 'Usuario registrado correctamente' });
+      const token = jwt.sign({ id: newUser._id, email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+      res.status(201).json({ token, username: newUser.username });
     } catch (err) {
-      console.error('Error en registro:', err);
-      res.status(500).json({ error: 'Error al registrar usuario' });
+      console.error('Error en /register:', err);
+      res.status(500).json({ error: 'Error del servidor' });
     }
   }
 );
 
-// POST /api/auth/login
-router.post('/login',
+// --- Login ---
+router.post(
+  '/login',
   [
-    body('email').isEmail().withMessage('Correo inválido'),
+    body('email').isEmail().withMessage('Email no válido'),
     body('password').notEmpty().withMessage('Contraseña requerida')
   ],
   async (req, res) => {
-    const errores = validationResult(req);
-    if (!errores.isEmpty()) {
-      return res.status(400).json({ errores: errores.array() });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errores: errors.array() });
     }
 
     const { email, password } = req.body;
 
     try {
-      const usuario = await User.findOne({ email });
-      if (!usuario) return res.status(401).json({ error: 'Credenciales incorrectas' });
+      const user = await User.findOne({ email });
+      if (!user) {
+        return res.status(401).json({ error: 'Credenciales inválidas (email)' });
+      }
 
-      const valido = await bcrypt.compare(password, usuario.passwordHash);
-      if (!valido) return res.status(401).json({ error: 'Credenciales incorrectas' });
+      if (!user.passwordHash) {
+        return res.status(500).json({ error: 'El usuario no tiene contraseña guardada' });
+      }
 
-      const token = jwt.sign(
-        { id: usuario._id, username: usuario.username },
-        process.env.JWT_SECRET,
-        { expiresIn: '1h' }
-      );
+      const match = await bcrypt.compare(password, user.passwordHash);
+      if (!match) {
+        return res.status(401).json({ error: 'Credenciales inválidas (contraseña)' });
+      }
 
-      res.json({ mensaje: 'Login exitoso', token });
+      const token = jwt.sign({ id: user._id, email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+      res.json({ token, username: user.username });
     } catch (err) {
-      console.error('Error en login:', err);
-      res.status(500).json({ error: 'Error en el inicio de sesión' });
+      console.error('Error en /login:', err);
+      res.status(500).json({ error: 'Error del servidor' });
     }
   }
 );
 
 module.exports = router;
-
