@@ -11,6 +11,8 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const multer = require('multer');
 const cron = require('node-cron');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 
@@ -73,87 +75,16 @@ app.get('/api/ping', async (req, res, next) => {
   }
 });
 
-// --- Evitar error GET login ---
-app.get('/api/auth/login', (req, res) => {
-  res.status(200).send('El endpoint /api/auth/login acepta solo peticiones POST.');
-});
+// --- Rutas de autenticación ---
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes);
 
-// --- Middleware de verificación JWT ---
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'] || '';
-  const token = authHeader.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ error: 'Token no proporcionado' });
-  }
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Token inválido' });
-    }
-    req.user = user;
-    next();
-  });
-}
+// --- Rutas de usuarios (admin) ---
+const userRoutes = require('./routes/users');
+app.use('/api/users', userRoutes);
 
-// --- Registro de usuario ---
-app.post('/api/auth/register',
-  body('username').isLength({ min: 3 }),
-  body('email').isEmail(),
-  body('password').isLength({ min: 6 }),
-  async (req, res, next) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: errors.array() });
-      }
-      const { username, email, password } = req.body;
-      const existing = await User.findOne({ email });
-      if (existing) {
-        return res.status(400).json({ error: 'Email ya registrado' });
-      }
-      const passwordHash = await bcrypt.hash(password, 10);
-      await new User({ username, email, passwordHash }).save();
-      res.status(201).json({ message: 'Usuario registrado correctamente' });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-// --- Login de usuario ---
-app.post('/api/auth/login',
-  body('email').isEmail(),
-  body('password').isLength({ min: 6 }),
-  async (req, res, next) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ error: errors.array() });
-      }
-      const { email, password } = req.body;
-      if (!password) {
-        return res.status(400).json({ error: 'La contraseña es requerida' });
-      }
-      const user = await User.findOne({ email });
-      if (!user || !user.passwordHash) {
-        return res.status(401).json({ error: 'Credenciales incorrectas' });
-      }
-      const match = await bcrypt.compare(password, user.passwordHash);
-      if (!match) {
-        return res.status(401).json({ error: 'Credenciales incorrectas' });
-      }
-      const payload = { id: user._id, username: user.username, email: user.email };
-      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
-      res.json({ token, username: user.username });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-// --- Ruta protegida de sesión ---
-app.get('/api/auth/session', authenticateToken, (req, res) => {
-  res.json({ message: 'Sesión válida', user: req.user });
-});
+// --- Middleware de autenticación ---
+const { authenticateToken } = require('./middleware/authMiddleware');
 
 // --- Subida de imágenes ---
 const storage = multer.diskStorage({
@@ -175,6 +106,24 @@ app.post('/api/upload', authenticateToken, upload.single('imagen'), (req, res) =
 // --- Cron para limpiar imágenes antiguas ---
 cron.schedule('0 0 * * *', () => {
   console.log('🧹 Tarea cron: limpiar imágenes antiguas');
+  const uploadsDir = path.join(__dirname, 'uploads');
+  const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000;
+
+  fs.readdir(uploadsDir, (err, files) => {
+    if (err) return console.error('❌ Error leyendo uploads:', err);
+    files.forEach(file => {
+      const filePath = path.join(uploadsDir, file);
+      fs.stat(filePath, (err, stats) => {
+        if (err) return;
+        if (stats.mtimeMs < fourHoursAgo) {
+          fs.unlink(filePath, err => {
+            if (err) return console.error('❌ Error al eliminar archivo:', err);
+            console.log(`🗑️ Archivo eliminado: ${file}`);
+          });
+        }
+      });
+    });
+  });
 });
 
 // --- Servir archivos estáticos ---
@@ -190,3 +139,4 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
+
