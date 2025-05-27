@@ -20,17 +20,14 @@ const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
 const FRONTEND_ORIGIN = 'https://momentto.netlify.app';
 
-// Verificar JWT_SECRET
+// --- Verificar JWT_SECRET ---
 if (!JWT_SECRET) {
-  console.error('❌ ERROR: JWT_SECRET no está definido en las variables de entorno. El servidor no iniciará.');
+  console.error('❌ ERROR: JWT_SECRET no está definido. El servidor no iniciará.');
   process.exit(1);
 }
 
-// --- Conexión a MongoDB ---
-mongoose.connect(MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+// --- Conexión a MongoDB (sin opciones obsoletas) ---
+mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB conectado'))
   .catch(err => {
     console.error('❌ Error MongoDB:', err);
@@ -55,6 +52,10 @@ app.use(cors({
 app.options('*', cors({ origin: FRONTEND_ORIGIN }));
 app.use(helmet());
 app.use(morgan('dev'));
+
+// Habilitar trust proxy para manejar X-Forwarded-For correctamente en rate-limit
+app.set('trust proxy', 1);
+
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -81,10 +82,13 @@ app.get('/api/auth/login', (req, res) => {
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'] || '';
   const token = authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Token no proporcionado' });
-
+  if (!token) {
+    return res.status(401).json({ error: 'Token no proporcionado' });
+  }
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Token inválido' });
+    if (err) {
+      return res.status(403).json({ error: 'Token inválido' });
+    }
     req.user = user;
     next();
   });
@@ -101,20 +105,15 @@ app.post('/api/auth/register',
       if (!errors.isEmpty()) {
         return res.status(400).json({ error: errors.array() });
       }
-
       const { username, email, password } = req.body;
-
       const existing = await User.findOne({ email });
       if (existing) {
         return res.status(400).json({ error: 'Email ya registrado' });
       }
-
       const passwordHash = await bcrypt.hash(password, 10);
       await new User({ username, email, passwordHash }).save();
-
       res.status(201).json({ message: 'Usuario registrado correctamente' });
     } catch (err) {
-      console.error('Error registro:', err);
       next(err);
     }
   }
@@ -130,36 +129,22 @@ app.post('/api/auth/login',
       if (!errors.isEmpty()) {
         return res.status(400).json({ error: errors.array() });
       }
-
       const { email, password } = req.body;
-      console.log('🔐 Login attempt:', { email });
-
-      // Encontrar usuario
+      if (!password) {
+        return res.status(400).json({ error: 'La contraseña es requerida' });
+      }
       const user = await User.findOne({ email });
       if (!user || !user.passwordHash) {
-        console.warn('🛑 Usuario no encontrado o sin hash:', email);
         return res.status(401).json({ error: 'Credenciales incorrectas' });
       }
-
-      // Comparar contraseñas
-      if (typeof password !== 'string') {
-        return res.status(400).json({ error: 'Contraseña inválida' });
-      }
-
       const match = await bcrypt.compare(password, user.passwordHash);
       if (!match) {
-        console.warn('🛑 Contraseña incorrecta para:', email);
         return res.status(401).json({ error: 'Credenciales incorrectas' });
       }
-
-      // Generar token
       const payload = { id: user._id, username: user.username, email: user.email };
       const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
-
-      console.log('✅ Login exitoso:', email);
       res.json({ token, username: user.username });
     } catch (err) {
-      console.error('🔥 Error en /api/auth/login:', err);
       next(err);
     }
   }
@@ -180,7 +165,6 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage });
-
 app.post('/api/upload', authenticateToken, upload.single('imagen'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Archivo no subido' });
@@ -191,7 +175,6 @@ app.post('/api/upload', authenticateToken, upload.single('imagen'), (req, res) =
 // --- Cron para limpiar imágenes antiguas ---
 cron.schedule('0 0 * * *', () => {
   console.log('🧹 Tarea cron: limpiar imágenes antiguas');
-  // Lógica de borrado pendiente
 });
 
 // --- Servir archivos estáticos ---
@@ -207,4 +190,3 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
-
