@@ -4,6 +4,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 
 const authRoutes = require('./routes/authRoutes');
+const imageRoutes = require('./routes/imageRoutes'); // Importar rutas de imágenes
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(express.json());
 
 // Rutas
 app.use('/api/auth', authRoutes);
+app.use('/api/images', imageRoutes); // Nueva ruta para imágenes
 
 // Conexión a MongoDB y levantamiento del servidor
 mongoose.connect(process.env.MONGO_URI)
@@ -22,4 +24,5 @@ mongoose.connect(process.env.MONGO_URI)
     });
   })
   .catch(err => console.error('Error al conectar a MongoDB:', err));
+
 
