@@ -1,43 +1,25 @@
 require('dotenv').config();
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
-const authRoutes = require('./routes/auth'); // Ajusta ruta si está en otra carpeta
+const mongoose = require('mongoose');
+
+const authRoutes = require('./routes/authRoutes');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Middleware para parsear JSON
+// Middlewares
+app.use(cors());
 app.use(express.json());
 
-// Configurar CORS para aceptar solicitudes de tu frontend en Netlify
-app.use(cors({
-  origin: 'https://momentto.netlify.app', // Cambia por el dominio real de tu frontend
-  credentials: true
-}));
-
-// Conexión a MongoDB con manejo correcto de eventos
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => {
-  console.log('✅ Conexión exitosa a MongoDB');
-})
-.catch(err => {
-  console.error('❌ Error conectando a MongoDB:', err);
-  process.exit(1);
-});
-
-// Rutas de autenticación
+// Rutas
 app.use('/api/auth', authRoutes);
 
-// Ruta raíz para verificar que el servidor está corriendo
-app.get('/', (req, res) => {
-  res.send('Servidor backend funcionando');
-});
+// Conexión a MongoDB y levantamiento del servidor
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    app.listen(process.env.PORT || 5000, () => {
+      console.log('Servidor conectado y corriendo en el puerto 5000');
+    });
+  })
+  .catch(err => console.error('Error al conectar a MongoDB:', err));
 
-// Iniciar servidor
-app.listen(PORT, () => {
-  console.log(`Servidor escuchando en el puerto ${PORT}`);
-});
