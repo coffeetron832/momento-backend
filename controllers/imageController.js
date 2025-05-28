@@ -3,14 +3,14 @@ const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// Configurar Cloudinary con variables de entorno
+// Configurar Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Configurar el almacenamiento con Cloudinary
+// Configuración de almacenamiento Cloudinary para multer
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
@@ -20,7 +20,6 @@ const storage = new CloudinaryStorage({
   }
 });
 
-// Middleware de Multer para procesar imágenes
 const upload = multer({ storage });
 
 exports.uploadMiddleware = upload.single('image');
@@ -31,12 +30,13 @@ exports.uploadImage = async (req, res) => {
       return res.status(400).json({ error: 'Imagen no válida o no enviada' });
     }
 
-    const { description } = req.body;
+    // Validar descripción
+    const description = typeof req.body.description === 'string' ? req.body.description.slice(0, 120) : '';
 
     const newImage = await Image.create({
       userId: req.user.id,
-      imageUrl: req.file.path,
-      description: description?.slice(0, 120)
+      imageUrl: req.file.path,  // URL que genera Cloudinary
+      description
     });
 
     res.status(201).json(newImage);
@@ -50,11 +50,10 @@ exports.getImages = async (req, res) => {
   try {
     const images = await Image.find()
       .sort({ createdAt: -1 })
-      .populate('userId', 'email'); // Puedes usar 'username' si prefieres
+      .populate('userId', 'email'); // O 'username' si prefieres
 
     res.json(images);
   } catch (err) {
     res.status(500).json({ error: 'Error al obtener imágenes' });
   }
 };
-
