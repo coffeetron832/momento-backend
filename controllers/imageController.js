@@ -22,9 +22,9 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage });
 
-exports.uploadMiddleware = upload.single('image');
+const uploadMiddleware = upload.single('image');
 
-exports.uploadImage = async (req, res) => {
+const uploadImage = async (req, res) => {
   try {
     if (!req.file || !req.file.path) {
       return res.status(400).json({ error: 'Imagen no válida o no enviada' });
@@ -35,7 +35,7 @@ exports.uploadImage = async (req, res) => {
 
     const newImage = await Image.create({
       userId: req.user.id,
-      imageUrl: req.file.path,  // URL que genera Cloudinary
+      imageUrl: req.file.path, // URL que genera Cloudinary
       description
     });
 
@@ -46,7 +46,7 @@ exports.uploadImage = async (req, res) => {
   }
 };
 
-exports.getImages = async (req, res) => {
+const getImages = async (req, res) => {
   try {
     const images = await Image.find()
       .sort({ createdAt: -1 })
@@ -57,3 +57,41 @@ exports.getImages = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener imágenes' });
   }
 };
+
+const deleteImage = async (req, res) => {
+  const userId = req.user.id;
+  const imageId = req.params.id;
+
+  try {
+    const image = await Image.findById(imageId);
+    if (!image) {
+      return res.status(404).json({ error: 'Imagen no encontrada' });
+    }
+
+    if (image.userId.toString() !== userId) {
+      return res.status(403).json({ error: 'No tienes permiso para eliminar esta imagen' });
+    }
+
+    // Eliminar de Cloudinary si la imagen tiene una URL válida
+    if (image.imageUrl.includes('res.cloudinary.com')) {
+      const publicIdMatch = image.imageUrl.match(/\/([^/]+)\.[a-zA-Z]+$/);
+      if (publicIdMatch && publicIdMatch[1]) {
+        await cloudinary.uploader.destroy(`momento_uploads/${publicIdMatch[1]}`);
+      }
+    }
+
+    await image.deleteOne();
+    res.json({ message: 'Imagen eliminada exitosamente' });
+  } catch (err) {
+    console.error('Error al eliminar imagen:', err);
+    res.status(500).json({ error: 'Error al eliminar imagen' });
+  }
+};
+
+module.exports = {
+  uploadMiddleware,
+  uploadImage,
+  getImages,
+  deleteImage
+};
+
