@@ -24,10 +24,10 @@ exports.register = async (req, res) => {
     const user = await User.create({ username: name, email, password });
 
     const token = createToken(user._id);
-    // Enviar token y datos básicos del usuario
+    // Enviar token y userId para frontend
     res.status(201).json({ 
       token, 
-      user: { id: user._id, username: user.username, email: user.email } 
+      userId: user._id
     });
   } catch (err) {
     console.error('Error en register:', err);
@@ -49,14 +49,13 @@ exports.login = async (req, res) => {
     }
 
     const token = createToken(user._id);
-    // Enviar token y datos básicos del usuario
+    // Enviar token y userId para frontend
     res.json({ 
       token, 
-      user: { id: user._id, username: user.username, email: user.email } 
+      userId: user._id
     });
   } catch (err) {
     console.error('Error en login:', err);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 };
-
