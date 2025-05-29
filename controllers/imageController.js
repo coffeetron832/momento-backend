@@ -35,7 +35,8 @@ const uploadImage = async (req, res) => {
 
     const newImage = await Image.create({
       userId: req.user.id,
-      imageUrl: req.file.path, // URL que genera Cloudinary
+      imageUrl: req.file.path,        // URL pública de Cloudinary
+      publicId: req.file.filename,    // ID único para eliminar
       description
     });
 
@@ -72,12 +73,9 @@ const deleteImage = async (req, res) => {
       return res.status(403).json({ error: 'No tienes permiso para eliminar esta imagen' });
     }
 
-    // Eliminar de Cloudinary si la imagen tiene una URL válida
-    if (image.imageUrl.includes('res.cloudinary.com')) {
-      const publicIdMatch = image.imageUrl.match(/\/([^/]+)\.[a-zA-Z]+$/);
-      if (publicIdMatch && publicIdMatch[1]) {
-        await cloudinary.uploader.destroy(`momento_uploads/${publicIdMatch[1]}`);
-      }
+    // Eliminar de Cloudinary usando publicId
+    if (image.publicId) {
+      await cloudinary.uploader.destroy(`momento_uploads/${image.publicId}`);
     }
 
     await image.deleteOne();
@@ -94,4 +92,3 @@ module.exports = {
   getImages,
   deleteImage
 };
-
