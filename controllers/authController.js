@@ -45,11 +45,18 @@ exports.login = async (req, res) => {
     }
 
     const token = createToken(user._id);
-    res.json({ token });
+    
+    // Enviar token + datos del usuario
+    res.json({
+      token,
+      user: {
+        username: user.username,
+        email: user.email,
+      }
+    });
   } catch (err) {
     console.error('Error en login:', err);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 };
-
 
