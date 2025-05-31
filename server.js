@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
 const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
 
 const authRoutes = require('./routes/authRoutes');
 const imageRoutes = require('./routes/imageRoutes'); // Importar rutas de imágenes
@@ -33,6 +34,9 @@ app.use(express.json({ limit: '10kb' }));
 
 // Sanitizar datos para evitar inyección NoSQL
 app.use(mongoSanitize());
+
+// Luego de helmet y mongoSanitize, antes de las rutas:
+app.use(xss());
 
 // Rutas
 app.use('/api/auth', authRoutes);
