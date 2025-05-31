@@ -45,8 +45,8 @@ const uploadImage = async (req, res) => {
       description
     });
 
-    // Poblar userId con email para que el frontend sepa si mostrar el botón "Eliminar"
-    const populatedImage = await newImage.populate('userId', 'email');
+    // Poblar userId con _id y email para que el frontend sepa si mostrar el botón "Eliminar"
+    const populatedImage = await newImage.populate('userId', '_id email');
 
     res.status(201).json(populatedImage);
   } catch (err) {
@@ -59,7 +59,7 @@ const getImages = async (req, res) => {
   try {
     const images = await Image.find()
       .sort({ createdAt: -1 })
-      .populate('userId', 'email'); // También puedes usar 'username' si prefieres
+      .populate('userId', '_id email'); // Incluyendo _id para frontend
 
     res.json(images);
   } catch (err) {
@@ -100,5 +100,6 @@ module.exports = {
   getImages,
   deleteImage
 };
+
 
 
