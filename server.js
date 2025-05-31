@@ -30,7 +30,7 @@ app.use(
 
 // Configuración segura de CORS
 app.use(cors({
-  origin: 'https://momentto.netlify.app/',  // Cambia este dominio por el de tu frontend real
+  origin: 'https://momentto.netlify.app',  // Cambia este dominio por el de tu frontend real
   methods: ['GET', 'POST', 'DELETE'],
 }));
 
