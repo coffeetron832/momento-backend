@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
+const mongoSanitize = require('express-mongo-sanitize');
 
 const authRoutes = require('./routes/authRoutes');
 const imageRoutes = require('./routes/imageRoutes'); // Importar rutas de imágenes
@@ -27,8 +28,11 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Middlewares para parsear JSON
-app.use(express.json());
+// Limitación de tamaño máximo del body para evitar ataques DoS
+app.use(express.json({ limit: '10kb' }));
+
+// Sanitizar datos para evitar inyección NoSQL
+app.use(mongoSanitize());
 
 // Rutas
 app.use('/api/auth', authRoutes);
