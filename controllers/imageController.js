@@ -30,22 +30,25 @@ const uploadImage = async (req, res) => {
       return res.status(400).json({ error: 'Imagen no válida o no enviada' });
     }
 
-    // Extraer publicId a partir de la URL de Cloudinary, sin extensión
-    // Ejemplo URL: https://res.cloudinary.com/demo/image/upload/v1234567/momento_uploads/abc123.jpg
-    // Quedaría: momento_uploads/abc123
+    // Extraer publicId de Cloudinary sin extensión
     const publicId = req.file.path.split('/upload/')[1].replace(/\.[^/.]+$/, '');
 
     // Validar descripción
-    const description = typeof req.body.description === 'string' ? req.body.description.slice(0, 120) : '';
+    const description = typeof req.body.description === 'string'
+      ? req.body.description.slice(0, 120)
+      : '';
 
     const newImage = await Image.create({
       userId: req.user.id,
-      imageUrl: req.file.path, // URL pública de Cloudinary
-      publicId,                // ID único para eliminar, con carpeta y sin extensión
+      imageUrl: req.file.path,
+      publicId,
       description
     });
 
-    res.status(201).json(newImage);
+    // Poblar userId con email para que el frontend sepa si mostrar el botón "Eliminar"
+    const populatedImage = await newImage.populate('userId', 'email');
+
+    res.status(201).json(populatedImage);
   } catch (err) {
     console.error('Error al subir imagen:', err);
     res.status(500).json({ error: 'Error al subir la imagen' });
@@ -56,7 +59,7 @@ const getImages = async (req, res) => {
   try {
     const images = await Image.find()
       .sort({ createdAt: -1 })
-      .populate('userId', 'email'); // O 'username' si prefieres
+      .populate('userId', 'email'); // También puedes usar 'username' si prefieres
 
     res.json(images);
   } catch (err) {
@@ -78,7 +81,7 @@ const deleteImage = async (req, res) => {
       return res.status(403).json({ error: 'No tienes permiso para eliminar esta imagen' });
     }
 
-    // Eliminar de Cloudinary usando publicId completo (folder + id sin extensión)
+    // Eliminar de Cloudinary
     if (image.publicId) {
       await cloudinary.uploader.destroy(image.publicId);
     }
@@ -97,4 +100,5 @@ module.exports = {
   getImages,
   deleteImage
 };
+
 
