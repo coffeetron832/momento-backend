@@ -30,13 +30,18 @@ const uploadImage = async (req, res) => {
       return res.status(400).json({ error: 'Imagen no válida o no enviada' });
     }
 
+    // Extraer publicId a partir de la URL de Cloudinary, sin extensión
+    // Ejemplo URL: https://res.cloudinary.com/demo/image/upload/v1234567/momento_uploads/abc123.jpg
+    // Quedaría: momento_uploads/abc123
+    const publicId = req.file.path.split('/upload/')[1].replace(/\.[^/.]+$/, '');
+
     // Validar descripción
     const description = typeof req.body.description === 'string' ? req.body.description.slice(0, 120) : '';
 
     const newImage = await Image.create({
       userId: req.user.id,
-      imageUrl: req.file.path,        // URL pública de Cloudinary
-      publicId: req.file.filename,    // ID único para eliminar
+      imageUrl: req.file.path, // URL pública de Cloudinary
+      publicId,                // ID único para eliminar, con carpeta y sin extensión
       description
     });
 
@@ -73,9 +78,9 @@ const deleteImage = async (req, res) => {
       return res.status(403).json({ error: 'No tienes permiso para eliminar esta imagen' });
     }
 
-    // Eliminar de Cloudinary usando publicId
+    // Eliminar de Cloudinary usando publicId completo (folder + id sin extensión)
     if (image.publicId) {
-      await cloudinary.uploader.destroy(`momento_uploads/${image.publicId}`);
+      await cloudinary.uploader.destroy(image.publicId);
     }
 
     await image.deleteOne();
@@ -92,3 +97,4 @@ module.exports = {
   getImages,
   deleteImage
 };
+
