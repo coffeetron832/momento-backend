@@ -12,8 +12,21 @@ const imageRoutes = require('./routes/imageRoutes'); // Importar rutas de imáge
 
 const app = express();
 
-// Seguridad básica con helmet
-app.use(helmet());
+// Seguridad básica con helmet y configuración CSP personalizada
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", 'https://momentto.netlify.app'],
+        styleSrc: ["'self'", 'https://fonts.googleapis.com'],
+        imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      },
+    },
+  })
+);
 
 // Configuración segura de CORS
 app.use(cors({
@@ -50,6 +63,4 @@ mongoose.connect(process.env.MONGO_URI)
     });
   })
   .catch(err => console.error('Error al conectar a MongoDB:', err));
-
-
 
