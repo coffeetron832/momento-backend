@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
 
 const authRoutes = require('./routes/authRoutes');
@@ -8,8 +10,24 @@ const imageRoutes = require('./routes/imageRoutes'); // Importar rutas de imáge
 
 const app = express();
 
-// Middlewares
-app.use(cors());
+// Seguridad básica con helmet
+app.use(helmet());
+
+// Configuración segura de CORS
+app.use(cors({
+  origin: 'https://momentto.netlify.app/',  // Cambia este dominio por el de tu frontend real
+  methods: ['GET', 'POST', 'DELETE'],
+}));
+
+// Limitador de peticiones para prevenir abuso o ataques
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100, // máximo 100 peticiones por IP en ese periodo
+  message: 'Demasiadas peticiones desde esta IP, por favor intenta más tarde.',
+});
+app.use(limiter);
+
+// Middlewares para parsear JSON
 app.use(express.json());
 
 // Rutas
@@ -24,5 +42,6 @@ mongoose.connect(process.env.MONGO_URI)
     });
   })
   .catch(err => console.error('Error al conectar a MongoDB:', err));
+
 
 
